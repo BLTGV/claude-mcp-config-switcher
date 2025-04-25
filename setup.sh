@@ -270,7 +270,15 @@ if [ -f "$LOADED_FILE" ]; then
       if [ "$(ls -t "$EFFECTIVE_SOURCE_CONFIG" "$LOADED_FILE" 2>/dev/null | head -1)" = "$LOADED_FILE" ]; then
           echo_info "Already using configuration matching ${C_BOLD}$CONFIG_DISPLAY_NAME${C_RESET}."
           NEED_TO_SWITCH=false
-          # Removed exit 0 here to allow the final 'open -a' check
+
+          # Check if Claude is already running
+          if pgrep -x "Claude" > /dev/null; then
+            echo_info "Claude is already running. No action needed."
+            exit 0 # Exit successfully, no need to switch or open
+          else
+            # Claude not running, let script continue to the final open step
+             echo_info "Claude is not running."
+          fi
       else
           echo_info "Updating to newer version of configuration ${C_BOLD}$CONFIG_DISPLAY_NAME${C_RESET}..."
           UPDATE_LAST=false # Don't update last when just refreshing the same config
