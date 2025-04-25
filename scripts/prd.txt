@@ -1,0 +1,95 @@
+<context>
+# Overview
+A command-line tool (`claude-mcp-manager`) for macOS to define, manage, and switch between different sets of `mcpServers` configurations (profiles) for the Claude Desktop application. It aims to simplify managing multiple MCP server setups by allowing granular control over individual server definitions, composing them into profiles using references, and handling secrets securely. The target user is a developer or power user who frequently switches between different MCP environments (e.g., work, personal, development).
+
+# Core Features
+- **Individual Server Management:**
+  - *What:* Store, view, add, remove, and edit definitions for individual MCP servers.
+  - *Why:* Allows reuse of server configurations across multiple profiles and simplifies updates.
+  - *How:* Manage JSON files (each defining one server's **value**) within `~/.config/claude/servers/` via CLI commands (`claude-mcp-manager server list/show/add/remove/edit/extract`). The filename determines the server's key name.
+- **Profile Management & Composition:**
+  - *What:* Define named profiles, view them, create new ones (empty or by copying), and edit them. Add/remove **references** to server definitions within profiles.
+  - *Why:* Enables users to create tailored collections of servers for different contexts by referencing canonical server definitions.
+  - *How:* Manage profile files in `~/.config/claude/profiles/`. Each profile file contains a list of server names (e.g., `{"servers": ["server1", "server2"]}`). Commands like `claude-mcp-manager profile add/remove` modify this list.
+- **Profile Activation (Switching):**
+  - *What:* Activate a specific profile by validating it, reading its list of servers, fetching definitions, resolving secrets, constructing the `mcpServers` block, and applying it to Claude.
+  - *Why:* The core functionality – applying a selected configuration set dynamically and safely.
+  - *How:* The main `claude-mcp-manager <profile_name>` command reads the profile's server list. **Validation Phase:** It iterates through the list, checks `servers/<name>.json` existence, uses `jq .` for JSON validity, and scans content for `{{...}}` placeholders, checking corresponding env vars or `.env` file. **Construction Phase (if validation passes):** It iterates again, reads each server file, performs secret substitution (`sed`/`awk`), and uses `jq` to build the final `mcpServers` object in memory before applying it to the target file.
+- **Secrets Handling:**
+  - *What:* Substitute placeholders in the *canonical server definitions* (in the `servers/` directory) with values from environment variables or a `.env` file.
+  - *Why:* Prevents storing sensitive API keys/tokens directly in configuration files.
+  - *How:* During the **validation step** of profile activation, check if required secrets exist. During the **construction step**, parse the JSON content for patterns like `{{ENV:VAR_NAME}}` or `{{DOTENV:KEY_NAME}}` and replace them. Error if a required secret (checked during validation) is now missing.
+- **Usability & Installation:**
+  - *What:* Simple installation, clear feedback, quick editing, pre-activation validation.
+  - *Why:* Improves user adoption and ease of use.
+  - *How:* Maintain `curl | sh` installer, use colored output, provide `edit` commands for servers/profiles.
+
+# User Experience
+- **User Persona:** macOS developer/power user using Claude Desktop with multiple MCP servers.
+- **Key User Flows:**
+    1.  Install the tool.
+    2.  Define individual servers (`server add/edit`), potentially using secret placeholders in the server definition files.
+    3.  Create profiles (`profile create/copy`).
+    4.  Add desired server **names** to profiles (`profile add <profile> <server_name>`).
+    5.  Switch between profiles (`claude-mcp-manager <profile_name>`). Script validates profile (server existence, JSON validity, secret availability) before applying. Secrets are resolved upon activation.
+    6.  List/Show/Edit/Remove servers and profiles as needed.
+    7.  Revert to the last used configuration (`claude-mcp-manager last`).
+- **UI/UX Considerations:** CLI-based. Clear, colored output. Consistent commands. Error on missing required secrets during validation/activation. Error if profile references a non-existent or invalid server file during validation.
+
+</context>
+<PRD>
+# Technical Architecture
+- **Language:** POSIX Shell Script.
+- **Dependencies:** `jq`, `pgrep`. `curl` for install.
+- **Configuration Storage (`~/.config/claude/`):**
+    - `profiles/`: Directory containing profile definition files (e.g., `work.json`). Each file contains a JSON object defining which servers to include, likely `{"servers": ["github_work", "filesystem_docs"]}`.
+    - `servers/`: Directory containing individual, canonical server definition files (e.g., `github_work.json`). Each file contains the JSON *value* (the object `{...}`) part of an `mcpServers` entry. These definitions may contain `{{...}}` placeholders.
+    - `.env`: Optional file for secrets (key=value pairs). Gitignored.
+    - `loaded`: Stores active profile name.
+    - `last.json`: Stores the *entire previous `mcpServers` block* from the target file.
+- **Target File:** `~/Library/Application Support/Claude/claude_desktop_config.json`. Modification uses `jq`.
+- **Secrets Resolution:** Implemented via shell substitution (`sed`/`awk`/etc.) during profile activation *after reading server files* from `servers/`. Reads `.env` and environment variables.
+- **Profile Composition:** `profile add` command uses `jq` to add a server name string to the profile's `servers` array. `profile remove` uses `jq` to remove a name from the array.
+- **Activation Construction:** The activation command reads the profile's server list. **Validation Phase:** It iterates through the list, checks `servers/<name>.json` existence, uses `jq .` for JSON validity, and scans content for `{{...}}` placeholders, checking corresponding env vars or `.env` file. **Construction Phase (if validation passes):** It iterates again, reads each server file, performs secret substitution (`sed`/`awk`), and uses `jq` to build the final `mcpServers` object in memory before applying it to the target file.
+- **Process Management:** `killall`, `pgrep`, `open -a`.
+- **Platform:** macOS specific.
+
+# Development Roadmap
+- **Phase 1 (MVP):**
+    - Core storage structure (`profiles/`, `servers/`, `.env`, `loaded`, `last.json`).
+    - `server add --file` (stores canonical definition).
+    - `profile create` (creates empty `{"servers": []}` file).
+    - `profile add <profile> <server_name>` (adds name to profile's `servers` array).
+    - `claude-mcp-manager <profile_name>`: Reads profile list, reads server files, **constructs** `mcpServers` block (without secrets initially), backup to `last.json`, update target, update `loaded`, restart Claude.
+    - `profile list / -l` and `server list`.
+    - `jq`/`pgrep` checks, installer, basic colored output.
+- **Phase 2:**
+    - Implement secrets resolution (`{{ENV:VAR}}`, `{{DOTENV:KEY}}`) during activation's construction phase.
+    - Implement **pre-activation validation** (server file existence, JSON validity, secret existence).
+    - Implement `claude-mcp-manager last`.
+    - Implement `server show`, `server remove`, `server edit`.
+    - Implement `profile show`, `profile copy`, `profile remove <profile> <server_name>`, `profile edit`.
+    - Refine output/error handling (e.g., check for missing server files during activation).
+- **Future Enhancements:** (Validation of JSON structure against schema?, keychain, interactive prompts, tests)
+
+# Logical Dependency Chain
+1.  **Core Storage & Basic Add:** Establish directories, `server add --file`, `profile create`, `profile add` (simple list update). Allows building blocks.
+2.  **Core Activation (Construction):** `claude-mcp-manager <profile>` (reads profile list, reads server files, *constructs* block, updates target, restarts). Provides core value.
+3.  **List Commands:** `server list`, `profile list` for visibility.
+4.  **Secrets Handling:** Implement `{{...}}` resolution during activation/construction.
+5.  **Pre-activation Validation:** Check files, JSON, secrets exist.
+6.  **Advanced Management Commands:** `show`, `remove`, `copy`, `edit` for servers/profiles.
+7.  **`last` Command:** Revert functionality.
+8.  **Refinements:** Output, errors, validation.
+
+# Risks and Mitigations
+- **Shell Script Complexity:** Constructing the final JSON dynamically from multiple files and performing substitutions in shell requires careful handling of loops, `jq`, and quoting. *Mitigation:* Heavy reliance on `jq` (e.g., using `reduce` or building step-by-step), modular functions, testing.
+- **Secrets Handling Security:** (Same as before)
+- **`jq` Dependency:** (Same as before)
+- **macOS Specifics:** (Same as before)
+- **Schema Consistency:** Ensure profile files contain a valid `servers` array and referenced server files exist/are valid JSON. *Mitigation:* Implement the pre-activation validation checks rigorously.
+
+# Appendix
+- **Non-Goals:** (Same as before)
+- **Secret Placeholder Syntax:** (Same as before)
+</PRD>

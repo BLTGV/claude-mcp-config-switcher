@@ -1,11 +1,11 @@
 #!/bin/sh
 
-# Script to switch Claude MCP server configuration
-# Usage: claude-mcp-switch [config_name | -l | --list | -u | --uninstall]
+# Script to manage Claude MCP configurations and servers
+# Usage: claude-mcp-manager [profile_name | server <verb> | profile <verb> | -l | --list | -u | --uninstall]
 
 # --- Configuration ---
 # Script paths
-SCRIPT_NAME="claude-mcp-switch"
+SCRIPT_NAME="claude-mcp-manager"
 SCRIPT_PATH="/usr/local/bin/$SCRIPT_NAME"
 
 # Configuration paths
