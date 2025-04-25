@@ -1,0 +1,12 @@
+# macOS
+.DS_Store
+
+# Optional editor/IDE files (uncomment if needed)
+# .vscode/
+# *.swp
+# *~
+
+# Optional build/dependency artifacts (uncomment if needed)
+# node_modules/
+# build/
+# dist/ 
