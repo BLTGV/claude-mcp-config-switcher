@@ -8,7 +8,7 @@ The Claude desktop app stores its configuration, including the `mcpServers` endp
 
 ## Requirements
 
-*   **macOS:** The script relies on macOS-specific paths (`~/Library/Application Support/Claude/`).
+*   **macOS:** The script relies on macOS-specific paths (`~/Library/Application Support/Claude/`) and commands (`killall`, `open`). **It will not work on Windows or Linux.**
 *   **jq:** The script uses `jq` to parse and manipulate JSON files. Install it if you haven't already:
     ```bash
     brew install jq
@@ -16,9 +16,21 @@ The Claude desktop app stores its configuration, including the `mcpServers` endp
 
 ## Installation
 
-1.  Save the `setup.sh` script to your machine.
+### Quick Install (Recommended)
+
+_(macOS Only)_ Run the following command in your terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BLTGV/claude-mcp-config-switcher/main/setup.sh | sh -s -- --install
+```
+
+This will download the script and run its installer directly.
+
+### Manual Installation
+
+1.  Save the `setup.sh` script to your machine (e.g., download it from the repository).
 2.  Make it executable: `chmod +x setup.sh`
-3.  Run the script's installer:
+3.  Run the script's installer from the directory where you saved it:
     ```bash
     ./setup.sh --install
     ```
@@ -40,31 +52,6 @@ You only need to run the installation once. Subsequently, you can use the `claud
 ### 1. Create Configuration Files
 
 Manually create `.json` files in the `~/.config/claude/` directory. Each file should represent a configuration profile and *must* contain at least the `mcpServers` key.
-
-**Example: `~/.config/claude/staging.json`**
-
-```json
-{
-  "mcpServers": {
-    "anthropic": "grpc://localhost:50051", // Example for local development
-    "claude": "grpc://claude-staging-mcp.example.internal:443"
-    // Add other necessary servers for this profile
-  },
-  "someOtherKey": "This key will be ignored by the script"
-}
-```
-
-**Example: `~/.config/claude/default.json`** (This might be your production config)
-
-```json
-{
-  "mcpServers": {
-    "anthropic": "grpcs://anthropic-mcp.prod.example.net:443",
-    "claude": "grpcs://claude-mcp.prod.example.net:443"
-    // Add other necessary servers for this profile
-  }
-}
-```
 
 **Example: `~/.config/claude/work_profile.json`** (Configures filesystem and GitHub tools)
 
