@@ -22,25 +22,53 @@ if ! command -v jq >/dev/null; then
   exit 1
 fi
 
-# Modified self-installation section
-# Replace the self-installation check with this:
-
 # Always check if we need to install
+INSTALL_URL="https://raw.githubusercontent.com/BLTGV/claude-mcp-config-switcher/main/setup.sh"
+
 if [ "$1" = "--install" ] || [ ! -f "$SCRIPT_PATH" ]; then
   echo "Installing $SCRIPT_NAME to /usr/local/bin..."
   # Create bin directory if it doesn't exist
   if [ ! -d "/usr/local/bin" ]; then
-    sudo mkdir -p "/usr/local/bin"
+    # Check if sudo is needed to create the directory
+    if [ -w "/usr/local" ]; then
+       mkdir -p "/usr/local/bin"
+    else
+       echo "Requires administrator privileges to create /usr/local/bin"
+       sudo mkdir -p "/usr/local/bin"
+    fi
+    # Check if directory creation succeeded
+    if [ ! -d "/usr/local/bin" ]; then
+        echo "Error: Failed to create directory /usr/local/bin." >&2
+        exit 1
+    fi
   fi
 
-  # Copy script to bin directory with sudo if needed
+  # Download script content to bin directory
   if [ -w "/usr/local/bin" ]; then
-    cp "$0" "$SCRIPT_PATH"
-    chmod +x "$SCRIPT_PATH"
+    # Check if curl is installed
+    if ! command -v curl >/dev/null; then echo "Error: curl is required for installation." >&2; exit 1; fi
+    # Download the script
+    if curl -fsSL "$INSTALL_URL" -o "$SCRIPT_PATH"; then
+      chmod +x "$SCRIPT_PATH"
+    else
+      echo "Error: Failed to download script from $INSTALL_URL" >&2
+      # Clean up potentially partially downloaded file
+      rm -f "$SCRIPT_PATH"
+      exit 1
+    fi
   else
     echo "Installation requires administrator privileges"
-    sudo cp "$0" "$SCRIPT_PATH"
-    sudo chmod +x "$SCRIPT_PATH"
+    # Check if curl is installed before attempting sudo
+    if ! command -v curl >/dev/null; then echo "Error: curl is required for installation." >&2; exit 1; fi
+    # Use sudo sh -c to handle redirection and permissions correctly
+    if sudo sh -c "curl -fsSL '$INSTALL_URL' -o '$SCRIPT_PATH' && chmod +x '$SCRIPT_PATH'"; then
+      echo "Script downloaded and permissions set successfully."
+    else
+      echo "Error: Failed to download script or set permissions using sudo." >&2
+      # Attempt to clean up potentially partially downloaded file with sudo
+      sudo rm -f "$SCRIPT_PATH"
+      exit 1
+    fi
   fi
 
   echo "Installation complete. You can now run $SCRIPT_NAME from anywhere."
