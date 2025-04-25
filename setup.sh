@@ -272,11 +272,36 @@ else
     # Update the loaded file timestamp
     touch "$LOADED_FILE"
 
-    # Restart Claude
-    echo "Restarting Claude application..."
+    # Terminate Claude if it's running to apply changes
+    echo "Closing Claude application (if running)..."
     killall "Claude" 2>/dev/null
-    open -a "Claude"
+
+    # Wait for Claude process to disappear (more robust than sleep)
+    ATTEMPTS=0
+    MAX_ATTEMPTS=5 # Wait up to 5 seconds
+    echo -n "Waiting for Claude to close..."
+    while pgrep -x "Claude" > /dev/null && [ $ATTEMPTS -lt $MAX_ATTEMPTS ]; do
+      sleep 1
+      echo -n "."
+      ATTEMPTS=$((ATTEMPTS + 1))
+    done
+    echo "" # Newline after dots
+
+    if [ $ATTEMPTS -eq $MAX_ATTEMPTS ]; then
+      echo "Warning: Claude process may not have terminated fully."
+    fi
 
     echo "Configuration switched successfully!"
-  fi
-fi
+
+  fi # End of if NEED_TO_SWITCH
+
+fi # End of the outer 'if target config exists and is valid' block
+
+# Ensure Claude application is running at the end, unless exited earlier
+# (e.g., for -l, --install, or errors)
+# `open -a` is idempotent if already running, just brings to front.
+
+echo "Ensuring Claude application is running..."
+open -a "Claude"
+
+exit 0 # Explicit successful exit
