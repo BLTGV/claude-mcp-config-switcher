@@ -9,17 +9,9 @@ SCRIPT_VERSION="0.1.0" # Match this with the main script's version
 # Define cleanup function
 cleanup() {
   # Add log_debug if available, otherwise use print_info
-  if command -v log_debug >/dev/null 2>&1; then
-      log_debug "Running cleanup..."
-  else
-      print_info "Running cleanup..."
-  fi
+  print_info "Running cleanup..."
   if [ -n "$TEMP_DOWNLOAD_DIR" ] && [ -d "$TEMP_DOWNLOAD_DIR" ]; then
-    if command -v log_debug >/dev/null 2>&1; then
-        log_debug "Cleaning up temporary download directory: $TEMP_DOWNLOAD_DIR"
-    else
-        print_info "Cleaning up temporary download directory: $TEMP_DOWNLOAD_DIR"
-    fi
+    print_info "Cleaning up temporary download directory: $TEMP_DOWNLOAD_DIR"
     rm -rf "$TEMP_DOWNLOAD_DIR"
   fi
 }
@@ -59,16 +51,12 @@ print_error() { print_color "$COLOR_RED" "ERROR: $@" >&2; }
 print_warning() { print_color "$COLOR_YELLOW" "WARNING: $@"; }
 print_success() { print_color "$COLOR_GREEN" "SUCCESS: $@"; }
 # Define log_debug function only if it's not already defined (might be sourced later)
-if ! command -v log_debug >/dev/null 2>&1; then
-    log_debug() { printf "DEBUG: %s\n" "$@" >&2; }
-fi
-# Use log_debug or print_info based on availability for consistency
+# if ! command -v log_debug >/dev/null 2>&1; then
+#    log_debug() { printf "DEBUG: %s\n" "$@" >&2; }
+# fi
+# Restore print_info to its original simple form
 print_info() { 
-    if command -v log_debug >/dev/null 2>&1; then
-        log_debug "INFO: $@"
-    else
-        printf "INFO: %s\n" "$@"
-    fi
+    printf "INFO: %s\n" "$@"
 }
 
 # --- Helper Functions ---
@@ -141,7 +129,7 @@ if [ ! -f "$SOURCE_MAIN_SCRIPT" ] || [ ! -f "$SOURCE_UTILS_SCRIPT" ]; then
         print_error "Failed to create temporary directory."
         exit 1
     fi
-    log_debug "Created temporary download directory: $TEMP_DOWNLOAD_DIR"
+    print_info "Created temporary download directory: $TEMP_DOWNLOAD_DIR"
 
     # Define GitHub Raw URLs (adjust branch if needed)
     base_url="https://raw.githubusercontent.com/BLTGV/claude-mcp-manager/main/src"
