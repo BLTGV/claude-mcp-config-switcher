@@ -179,14 +179,7 @@ printf "  Binary Directory:  %s\n" "$INSTALL_BIN_DIR"
 printf "  Command Symlink:   %s\n" "$SYMLINK_PATH"
 printf "\n"
 
-printf "Proceed with installation? [Y/n] "
-read confirm
-# Use simple if/else for maximum sh compatibility
-if [ "$confirm" = N* ] || [ "$confirm" = n* ]; then
-    print_info "Installation cancelled by user."
-    exit 0
-fi
-# Otherwise, assume Yes and proceed
+print_info "Proceeding with installation..."
 
 # 3. Check Dependencies
 check_dependencies
