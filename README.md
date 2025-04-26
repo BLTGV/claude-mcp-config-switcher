@@ -92,33 +92,72 @@ claude-mcp-manager <command | profile_name | option>
 
 This project was built utilizing [claude-task-master](https://github.com/eyaltoledano/claude-task-master), an AI-driven task management system by Eyal Toledano ([@eyaltoledano](https://github.com/eyaltoledano)) and Ralph Ecom ([@RalphEcom](https://github.com/RalphEcom)), to define, manage, and implement the features described above.
 
+## Shell Completion (Optional)
+
+Tab completion is available for Bash and Zsh shells.
+
+First, ensure `claude-mcp-manager` is installed and accessible in your PATH.
+
+### Bash
+
+1.  **Install `bash-completion@2`:** If you haven't already, install the latest bash completion system using Homebrew:
+    ```bash
+    brew install bash-completion@2
+    ```
+2.  **Add to `.bash_profile`:** Follow the instructions printed by `brew info bash-completion@2` to add the necessary line to your `~/.bash_profile` (or `~/.bashrc`). It usually looks like this:
+    ```bash
+    # Add the following line (or similar) to ~/.bash_profile
+    export BASH_COMPLETION_COMPAT_DIR="$(brew --prefix)/etc/bash_completion.d"
+    [[ -r "$(brew --prefix)/etc/profile.d/bash_completion.sh" ]] && . "$(brew --prefix)/etc/profile.d/bash_completion.sh"
+    ```
+3.  **Generate and Install Script:** Run the following command to generate the completion script and place it in the correct directory:
+    ```bash
+    # Determine the completion directory
+    COMPLETION_DIR="$(brew --prefix)/etc/bash_completion.d"
+    # Ensure the directory exists
+    mkdir -p "$COMPLETION_DIR"
+    # Generate the script
+    claude-mcp-manager completion bash > "${COMPLETION_DIR}/claude-mcp-manager"
+    ```
+4.  **Reload Shell:** Open a new terminal window or run `source ~/.bash_profile`.
+
+### Zsh
+
+Zsh has built-in completion support.
+
+1.  **Ensure `compinit`:** Make sure your `~/.zshrc` file includes `autoload -U compinit && compinit` somewhere (usually near the beginning or end).
+2.  **Choose a Completion Directory:** Zsh completions are typically stored in a directory listed in your `$fpath` variable. A common user-specific location is `~/.zsh/completion`. Create it if it doesn't exist:
+    ```bash
+    mkdir -p ~/.zsh/completion
+    ```
+3.  **Add Directory to `fpath`:** Ensure this directory is added to your Zsh function path in your `~/.zshrc` *before* calling `compinit`:
+    ```bash
+    # Add near the top of ~/.zshrc
+    fpath=(~/.zsh/completion $fpath)
+    
+    # ... other zsh config ...
+    
+    # Ensure compinit is loaded
+    autoload -U compinit && compinit
+    ```
+4.  **Generate and Install Script:** Run the following command to generate the completion script. Note the filename starts with an underscore (`_`):
+    ```bash
+    claude-mcp-manager completion zsh > ~/.zsh/completion/_claude-mcp-manager
+    ```
+5.  **Reload Shell:** Open a new terminal window or run `source ~/.zshrc`.
+
+After installation, you should be able to use tab completion for commands, subcommands, profile names, and server names.
+
 ## Uninstall
 
-To uninstall, run the following commands:
-
+To uninstall, run the following command:
 ```bash
-# Find the installed command path
-INSTALL_PATH=$(command -v claude-mcp-manager)
+claude-mcp-manager uninstall
+```
+This will remove the script and the command symlink. It will ask for confirmation first.
 
-if [ -n "$INSTALL_PATH" ] && [ -L "$INSTALL_PATH" ]; then
-  # Get the real path the symlink points to
-  REAL_PATH=$(readlink "$INSTALL_PATH")
-  # Get the directory containing the real script (lib dir)
-  LIB_DIR=$(dirname "$REAL_PATH")
-  # Remove the symlink
-  echo "Removing symlink: $INSTALL_PATH"
-  rm "$INSTALL_PATH"
-  # Remove the library directory
-  if [ -d "$LIB_DIR" ]; then
-    echo "Removing library directory: $LIB_DIR"
-    rm -rf "$LIB_DIR"
-  fi
-else
-  echo "WARN: Could not find installed claude-mcp-manager symlink. Manual removal might be needed."
-fi
-
-# Remove the configuration directory
-echo "Removing configuration directory: ~/.config/claude/"
-rm -rf "$HOME/.config/claude/"
-
-echo "Uninstall complete." 
+To *also* remove the configuration directory (`~/.config/claude`), which contains all your profiles, server definitions, logs, and the `.env` file (potentially containing secrets), use:
+```bash
+claude-mcp-manager uninstall --remove-config
+```
+**Warning:** Removing the configuration directory is permanent and requires a separate confirmation. 
