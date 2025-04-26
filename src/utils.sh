@@ -239,7 +239,7 @@ kill_claude() {
             log_info "${CLAUDE_APP_NAME} terminated gracefully."
             return 0
         else
-            log_warning "${CLAUDE_APP_NAME} did not terminate gracefully after 5 seconds. Sending KILL signal."
+            log_warn "${CLAUDE_APP_NAME} did not terminate gracefully after 5 seconds. Sending KILL signal."
             if kill -9 ${pid} > /dev/null 2>&1; then
                 log_info "${CLAUDE_APP_NAME} terminated forcefully (KILL signal)."
                 # Short pause after kill -9
@@ -329,7 +329,7 @@ load_dotenv() {
              local var_name=${line%%=*}
              log_debug "Exported variable: ${var_name} from dotenv file."
         else
-             log_warning "Failed to export line from dotenv: $line"
+             log_warn "Failed to export line from dotenv: $line"
         fi
     done < "$dotenv_file"
     log_debug "Finished loading secrets from ${dotenv_file}"
