@@ -144,13 +144,13 @@ if [ ! -f "$SOURCE_MAIN_SCRIPT" ] || [ ! -f "$SOURCE_UTILS_SCRIPT" ]; then
     log_debug "Created temporary download directory: $TEMP_DOWNLOAD_DIR"
 
     # Define GitHub Raw URLs (adjust branch if needed)
-    local base_url="https://raw.githubusercontent.com/BLTGV/claude-mcp-manager/main/src"
-    local main_script_url="${base_url}/claude-mcp-manager"
-    local utils_script_url="${base_url}/utils.sh"
+    base_url="https://raw.githubusercontent.com/BLTGV/claude-mcp-manager/main/src"
+    main_script_url="${base_url}/claude-mcp-manager"
+    utils_script_url="${base_url}/utils.sh"
 
     # Define paths for downloaded files
-    local downloaded_main_script="${TEMP_DOWNLOAD_DIR}/claude-mcp-manager"
-    local downloaded_utils_script="${TEMP_DOWNLOAD_DIR}/utils.sh"
+    downloaded_main_script="${TEMP_DOWNLOAD_DIR}/claude-mcp-manager"
+    downloaded_utils_script="${TEMP_DOWNLOAD_DIR}/utils.sh"
 
     # Download main script
     print_info "Downloading main script from $main_script_url..."
