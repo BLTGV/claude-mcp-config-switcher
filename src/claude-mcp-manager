@@ -86,6 +86,9 @@ print_help() {
    echo "                       Import servers from an old MCP JSON config file"
    echo "  export <profile> --output <file>"
    echo "                       Export a profile's servers (with secrets resolved) to a file"
+   echo "  uninstall [--remove-config]"
+   echo "                       Remove the claude-mcp-manager script and symlink"
+   echo "                       (--remove-config also deletes the ~/.config/claude directory)"
    echo ""
    # Call specific help sections
    # print_server_help # Optionally include full details here?
@@ -260,7 +263,7 @@ main() {
 
                         # Copy file content
                         if cp "$file_path" "$target_server_file"; then
-                            chmod 600 "$target_server_file" || log_warning "Failed to set permissions on ${target_server_file}"
+                            chmod 600 "$target_server_file" || log_warn "Failed to set permissions on ${target_server_file}"
                             print_success "Server definition '${server_name}' added successfully."
                         else
                             exit_with_error "Failed to copy server definition from ${file_path} to ${target_server_file}"
@@ -276,7 +279,7 @@ main() {
 
                         # Write JSON string to file
                         if echo "$json_string" > "$target_server_file"; then
-                            chmod 600 "$target_server_file" || log_warning "Failed to set permissions on ${target_server_file}"
+                            chmod 600 "$target_server_file" || log_warn "Failed to set permissions on ${target_server_file}"
                             print_success "Server definition '${server_name}' added successfully from JSON string."
                         else
                             # Attempt cleanup
@@ -310,7 +313,7 @@ main() {
                     local edit_status=$?
 
                     if [ $edit_status -ne 0 ]; then
-                        log_warning "Editor exited with status $edit_status for $server_file"
+                        log_warn "Editor exited with status $edit_status for $server_file"
                     fi
 
                     # Validate JSON after edit
@@ -395,7 +398,7 @@ main() {
 
                         # Check for overwrite
                         if [ -e "$target_server_file" ]; then
-                            log_warning "Server definition file '${target_server_file}' already exists."
+                            log_warn "Server definition file '${target_server_file}' already exists."
                             read -p "  Overwrite? [y/N] " confirm
                             if ! [[ "$confirm" =~ ^[Yy]$ ]]; then
                                 log_info "Skipping overwrite for '${server_name}'."
@@ -408,7 +411,7 @@ main() {
                         # Write the server definition
                         log_debug "Writing definition for '${server_name}' to ${target_server_file}"
                         if echo "$server_definition" | jq . > "$target_server_file"; then # Pretty print with jq
-                            chmod 600 "$target_server_file" || log_warning "Failed to set permissions on ${target_server_file}"
+                            chmod 600 "$target_server_file" || log_warn "Failed to set permissions on ${target_server_file}"
                             log_debug "Successfully wrote and set permissions for ${target_server_file}"
                             extracted_server_names+=("$server_name")
                         else
@@ -470,7 +473,7 @@ main() {
                              else
                                  echo "$updated_profile_json" | jq . > "$temp_prof_file" # Pretty print
                                  if mv "$temp_prof_file" "$target_profile_file"; then
-                                     chmod 600 "$target_profile_file" || log_warning "Failed to set permissions on ${target_profile_file}"
+                                     chmod 600 "$target_profile_file" || log_warn "Failed to set permissions on ${target_profile_file}"
                                      print_success "Profile '${target_profile_name}' ${profile_action} successfully with extracted servers."
                                  else
                                      rm "$temp_prof_file" &>/dev/null
@@ -571,7 +574,7 @@ main() {
 
                     # Create the profile file
                     if echo '{"servers": []}' > "$target_profile_file"; then
-                        chmod 600 "$target_profile_file" || log_warning "Failed to set permissions on ${target_profile_file}"
+                        chmod 600 "$target_profile_file" || log_warn "Failed to set permissions on ${target_profile_file}"
                         print_success "Profile '${profile_name}' created successfully."
                     else
                         # Attempt to remove potentially partially created file
@@ -602,7 +605,7 @@ main() {
 
                     # Perform the copy
                     if cp "$src_profile_file" "$dest_profile_file"; then
-                        chmod 600 "$dest_profile_file" || log_warning "Failed to set permissions on new profile file: ${dest_profile_file}"
+                        chmod 600 "$dest_profile_file" || log_warn "Failed to set permissions on new profile file: ${dest_profile_file}"
                         print_success "Profile '${src_profile_name}' copied successfully to '${dest_profile_name}'."
                     else
                         exit_with_error "Failed to copy profile from ${src_profile_file} to ${dest_profile_file}"
@@ -633,7 +636,7 @@ main() {
                     local edit_status=$?
 
                     if [ $edit_status -ne 0 ]; then
-                        log_warning "Editor exited with status $edit_status for $profile_file"
+                        log_warn "Editor exited with status $edit_status for $profile_file"
                     fi
 
                     # Validate JSON after edit
@@ -698,7 +701,7 @@ main() {
 
                     # Replace the original file with the temporary file
                     if mv "$temp_file" "$target_profile_file"; then
-                        chmod 600 "$target_profile_file" || log_warning "Failed to set permissions on ${target_profile_file}"
+                        chmod 600 "$target_profile_file" || log_warn "Failed to set permissions on ${target_profile_file}"
                         if [ "$servers_added_count" -gt 0 ]; then
                             print_success "Successfully added ${servers_added_count} server(s) to profile '${profile_name}'."
                         fi
@@ -758,7 +761,7 @@ main() {
 
                     # Replace the original file with the temporary file
                     if mv "$temp_file" "$target_profile_file"; then
-                        chmod 600 "$target_profile_file" || log_warning "Failed to set permissions on ${target_profile_file}"
+                        chmod 600 "$target_profile_file" || log_warn "Failed to set permissions on ${target_profile_file}"
                         if [ "$servers_removed_count" -gt 0 ]; then
                             print_success "Successfully removed ${servers_removed_count} server(s) from profile '${profile_name}'."
                         fi
@@ -850,7 +853,7 @@ $(echo "$last_servers" | jq '.')"
                 
                 # Update loaded file to indicate restored state
                 log_debug "Updating loaded file to '(restored_previous)': ${LOADED_FILE}"
-                echo "(restored_previous)" > "${LOADED_FILE}" || log_warning "Failed to update loaded file: ${LOADED_FILE}"
+                echo "(restored_previous)" > "${LOADED_FILE}" || log_warn "Failed to update loaded file: ${LOADED_FILE}"
                 log_debug "Updated loaded file: ${LOADED_FILE}"
                 
                 print_success "Successfully restored the last configuration."
@@ -867,6 +870,10 @@ $(echo "$last_servers" | jq '.')"
         export)
             # --- Export Command ---
             handle_export_command "$@"
+            ;;
+        uninstall)
+            # --- Uninstall Command ---
+            handle_uninstall_command "$@"
             ;;
         *)
             # --- Try Profile Activation or Error ---
@@ -932,7 +939,7 @@ $(echo "$last_servers" | jq '.')"
                                  key_validate=$(echo "$placeholder_validate" | sed -n 's/^{{[A-Z_]*:\\([a-zA-Z0-9_]*\\)}}/\\\\1/p')
                                  
                                  if [ -z "$type_validate" ] || [ -z "$key_validate" ]; then
-                                      log_warning "Could not parse placeholder '${placeholder_validate}' in ${server_file_validate}. Skipping validation for this placeholder."
+                                      log_warn "Could not parse placeholder '${placeholder_validate}' in ${server_file_validate}. Skipping validation for this placeholder."
                                       continue
                                  fi
 
@@ -1031,7 +1038,7 @@ $(echo "$last_servers" | jq '.')"
                 local redacted_json
                 redacted_json=$(echo "$new_mcp_servers" | jq 'with_entries(if (.key | test("key|token|secret"; "i")) and (.value | type == "string") then .value = "<REDACTED>" else . end)')
                 if [ $? -ne 0 ]; then
-                    log_warning "jq redaction failed. Logging raw structure (may contain secrets if DEBUG level is high)."
+                    log_warn "jq redaction failed. Logging raw structure (may contain secrets if DEBUG level is high)."
                     redacted_json="$new_mcp_servers" # Fallback to unredacted if jq fails
                 fi
                 log_debug "${redacted_json}"
@@ -1075,7 +1082,7 @@ $(echo "$last_servers" | jq '.')"
 
                     # Update loaded file
                     log_debug "STEP 18: Updating loaded file: ${LOADED_FILE}"
-                    echo "$command" > "$LOADED_FILE" || log_warning "Failed to update loaded file: ${LOADED_FILE}"
+                    echo "$command" > "$LOADED_FILE" || log_warn "Failed to update loaded file: ${LOADED_FILE}"
                     log_debug "STEP 19: Updated loaded file: ${LOADED_FILE}"
 
                     print_success "Profile '${command}' activated successfully."
@@ -1152,7 +1159,7 @@ handle_import_command() {
         target_server_file="${SERVERS_DIR}/${server_name}.json"
 
         if [ -e "$target_server_file" ]; then
-            log_warning "Server definition '${server_name}' already exists. Overwriting: ${target_server_file}"
+            log_warn "Server definition '${server_name}' already exists. Overwriting: ${target_server_file}"
         fi
 
         log_info "Saving server definition: ${server_name}.json"
@@ -1194,7 +1201,7 @@ handle_import_command() {
         log_info "Creating profile '${profile_name}' with imported servers..."
 
         if [ -e "$target_profile_file" ]; then
-            log_warning "Profile '${profile_name}' already exists. Overwriting: ${target_profile_file}"
+            log_warn "Profile '${profile_name}' already exists. Overwriting: ${target_profile_file}"
         fi
 
         # Create the profile JSON { "servers": ["name1", "name2"] }
@@ -1262,7 +1269,7 @@ handle_export_command() {
     fi
     # Warn if output file exists
     if [ -e "$output_file" ]; then
-        log_warning "Output file already exists and will be overwritten: ${output_file}"
+        log_warn "Output file already exists and will be overwritten: ${output_file}"
     fi
     log_debug "Output path validation successful."
 
@@ -1331,10 +1338,130 @@ handle_export_command() {
     fi
 
     # Set permissions (consistent with others, though secrets are resolved)
-    chmod 600 "$output_file" || log_warning "Failed to set permissions on output file: ${output_file}"
+    chmod 600 "$output_file" || log_warn "Failed to set permissions on output file: ${output_file}"
 
     print_success "Successfully exported ${server_count} server(s) from profile '${profile_name}' to ${output_file}"
     log_debug "handle_export_command finished."
+}
+
+# === Uninstall Command Logic ===
+handle_uninstall_command() {
+    log_debug "handle_uninstall_command started with args: $@"
+    local remove_config=0
+
+    # Parse arguments
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --remove-config)
+                remove_config=1
+                shift
+                ;;
+            *)
+                exit_with_error "Unknown argument for uninstall: $1" ;;
+        esac
+    done
+
+    log_info "Preparing to uninstall claude-mcp-manager..."
+
+    # Find the actual script path and the symlink path
+    local script_library_path="$SCRIPT_DIR" # SCRIPT_DIR is determined at the start
+    local symlink_path
+    symlink_path=$(command -v claude-mcp-manager) # Find the command in PATH
+
+    if [ -z "$symlink_path" ] && [ ! -L "$symlink_path" ]; then
+        log_warn "Could not find the command symlink 'claude-mcp-manager' in PATH. It might have been removed already."
+        symlink_path="" # Ensure it's empty if not found or not a symlink
+    else
+         log_debug "Found command symlink at: ${symlink_path}"
+    fi
+
+    if [ ! -d "$script_library_path" ]; then
+        log_warn "Script library directory not found: ${script_library_path}. It might have been removed already."
+        script_library_path="" # Ensure it's empty if not found
+    else
+        log_debug "Found script library directory at: ${script_library_path}"
+    fi
+
+    if [ -z "$symlink_path" ] && [ -z "$script_library_path" ]; then
+        print_info "Nothing to remove (symlink and library directory not found)."
+        # Still check for config removal if requested
+    else
+        # --- Primary Confirmation --- 
+        local confirm
+        print_bold "This will remove the following:"
+        if [ -n "$symlink_path" ]; then
+            echo "  - Symlink: ${symlink_path}"
+        fi
+        if [ -n "$script_library_path" ]; then
+            echo "  - Script Library: ${script_library_path}"
+        fi
+        read -p "Are you sure you want to proceed with uninstalling the script? [y/N] " confirm
+        
+        if ! [[ "$confirm" =~ ^[Yy]$ ]]; then
+            print_info "Uninstall cancelled by user."
+            exit 0
+        fi
+
+        # --- Perform Removal --- 
+        local removal_failed=0
+
+        if [ -n "$symlink_path" ]; then
+            log_info "Removing symlink: ${symlink_path}"
+            if ! rm -f "$symlink_path"; then
+                 log_error "Failed to remove symlink: ${symlink_path}. Manual removal might be needed."
+                 removal_failed=1
+            else
+                 log_debug "Symlink removed successfully."
+            fi
+        fi
+
+        if [ -n "$script_library_path" ]; then
+            log_info "Removing script library directory: ${script_library_path}"
+            if ! rm -rf "$script_library_path"; then
+                 log_error "Failed to remove script library directory: ${script_library_path}. Manual removal might be needed."
+                 removal_failed=1
+            else
+                 log_debug "Script library directory removed successfully."
+            fi
+        fi
+        
+        if [ $removal_failed -eq 0 ]; then
+            print_success "claude-mcp-manager script and symlink removed successfully."
+        else
+             print_warning "Some errors occurred during script/symlink removal. Please check logs."
+        fi
+    fi # End primary removal block
+
+    # --- Configuration Removal --- 
+    if [ $remove_config -eq 1 ]; then
+        log_info "Configuration removal requested (--remove-config)."
+        if [ ! -d "$CONFIG_DIR" ]; then
+            print_info "Configuration directory not found: ${CONFIG_DIR}. Nothing to remove."
+        else
+            # Explicit confirmation for config removal
+            local confirm_config
+            print_warning "This will permanently delete the entire configuration directory:"
+            print_warning "  ${CONFIG_DIR}"
+            print_warning "This includes all profiles, server definitions, logs, and the .env file!"
+            read -p "Are you absolutely sure you want to remove the configuration directory? [y/N] " confirm_config
+            
+            if [[ "$confirm_config" =~ ^[Yy]$ ]]; then
+                log_info "Removing configuration directory: ${CONFIG_DIR}"
+                if rm -rf "$CONFIG_DIR"; then
+                    print_success "Configuration directory removed successfully: ${CONFIG_DIR}"
+                else
+                    exit_with_error "Failed to remove configuration directory: ${CONFIG_DIR}. Manual removal might be needed."
+                fi
+            else
+                print_info "Configuration directory removal cancelled."
+            fi
+        fi
+    else
+        print_info "Configuration directory removal not requested. It remains at: ${CONFIG_DIR}"
+    fi
+
+    print_info "Uninstall process complete."
+    log_debug "handle_uninstall_command finished."
 }
 
 # === Script Entry Point ===
