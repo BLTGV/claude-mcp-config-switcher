@@ -6,6 +6,27 @@ set -e # Exit immediately if a command exits with a non-zero status.
 
 SCRIPT_VERSION="0.1.0" # Match this with the main script's version
 
+# Define cleanup function
+cleanup() {
+  # Add log_debug if available, otherwise use print_info
+  if command -v log_debug >/dev/null 2>&1; then
+      log_debug "Running cleanup..."
+  else
+      print_info "Running cleanup..."
+  fi
+  if [ -n "$TEMP_DOWNLOAD_DIR" ] && [ -d "$TEMP_DOWNLOAD_DIR" ]; then
+    if command -v log_debug >/dev/null 2>&1; then
+        log_debug "Cleaning up temporary download directory: $TEMP_DOWNLOAD_DIR"
+    else
+        print_info "Cleaning up temporary download directory: $TEMP_DOWNLOAD_DIR"
+    fi
+    rm -rf "$TEMP_DOWNLOAD_DIR"
+  fi
+}
+
+# Set trap to call cleanup function on EXIT, INT, TERM, HUP
+trap cleanup EXIT INT TERM HUP
+
 # --- Configuration ---
 APP_NAME="claude-mcp-manager"
 DEFAULT_LIB_DIR="/usr/local/lib/$APP_NAME"
@@ -37,7 +58,18 @@ print_bold() { print_color "$COLOR_BOLD" "$@"; }
 print_error() { print_color "$COLOR_RED" "ERROR: $@" >&2; }
 print_warning() { print_color "$COLOR_YELLOW" "WARNING: $@"; }
 print_success() { print_color "$COLOR_GREEN" "SUCCESS: $@"; }
-print_info() { printf "INFO: %s\n" "$@"; }
+# Define log_debug function only if it's not already defined (might be sourced later)
+if ! command -v log_debug >/dev/null 2>&1; then
+    log_debug() { printf "DEBUG: %s\n" "$@" >&2; }
+fi
+# Use log_debug or print_info based on availability for consistency
+print_info() { 
+    if command -v log_debug >/dev/null 2>&1; then
+        log_debug "INFO: $@"
+    else
+        printf "INFO: %s\n" "$@"
+    fi
+}
 
 # --- Helper Functions ---
 echo_bold() {
@@ -57,6 +89,11 @@ path_contains() {
 check_dependencies() {
     print_info "Checking dependencies..."
     missing_deps=0
+    # Need curl for downloading if in curl|sh mode
+    if ! check_command curl; then
+        print_error "Dependency 'curl' not found. Cannot download source files if needed."
+        missing_deps=1
+    fi
     if ! check_command jq; then
         print_error "Dependency 'jq' not found. Please install it (e.g., 'brew install jq' or 'sudo apt-get install jq')."
         missing_deps=1
@@ -89,19 +126,59 @@ check_dependencies() {
 
 # --- Installation Logic ---
 
-# 1. Check Source Files
+# 1. Check Source Files and Download if Necessary
 print_info "Checking source files..."
-if [ ! -f "$SOURCE_MAIN_SCRIPT" ]; then
-    print_error "Main script not found: $SOURCE_MAIN_SCRIPT"
-    print_info "Ensure this installer is in the root directory of the claude-mcp-manager project if running locally."
-    print_info "If using 'curl | sh', ensure the source tarball/structure is correct."
-    exit 1
+TEMP_DOWNLOAD_DIR="" # Initialize temporary directory variable
+
+# Check if source files exist relative to the installer's calculated directory
+if [ ! -f "$SOURCE_MAIN_SCRIPT" ] || [ ! -f "$SOURCE_UTILS_SCRIPT" ]; then
+    print_info "Source files not found locally, attempting download (curl | sh mode)..."
+
+    # Create a temporary directory
+    # Try mktemp first, fallback for systems without it (less secure)
+    TEMP_DOWNLOAD_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'cpm-install.XXXXXX') 
+    if [ -z "$TEMP_DOWNLOAD_DIR" ] || [ ! -d "$TEMP_DOWNLOAD_DIR" ]; then
+        print_error "Failed to create temporary directory."
+        exit 1
+    fi
+    log_debug "Created temporary download directory: $TEMP_DOWNLOAD_DIR"
+
+    # Define GitHub Raw URLs (adjust branch if needed)
+    local base_url="https://raw.githubusercontent.com/BLTGV/claude-mcp-manager/main/src"
+    local main_script_url="${base_url}/claude-mcp-manager"
+    local utils_script_url="${base_url}/utils.sh"
+
+    # Define paths for downloaded files
+    local downloaded_main_script="${TEMP_DOWNLOAD_DIR}/claude-mcp-manager"
+    local downloaded_utils_script="${TEMP_DOWNLOAD_DIR}/utils.sh"
+
+    # Download main script
+    print_info "Downloading main script from $main_script_url..."
+    if ! curl -fsSL "$main_script_url" -o "$downloaded_main_script"; then
+        print_error "Failed to download main script from $main_script_url"
+        # Cleanup is handled by trap
+        exit 1
+    fi
+
+    # Download utils script
+    print_info "Downloading utils script from $utils_script_url..."
+    if ! curl -fsSL "$utils_script_url" -o "$downloaded_utils_script"; then
+        print_error "Failed to download utils script from $utils_script_url"
+        # Cleanup is handled by trap
+        exit 1
+    fi
+
+    # Update source paths to point to the downloaded files
+    SOURCE_MAIN_SCRIPT="$downloaded_main_script"
+    SOURCE_UTILS_SCRIPT="$downloaded_utils_script"
+    print_success "Required source files downloaded successfully."
+else
+    print_info "Found source files locally."
 fi
-if [ ! -f "$SOURCE_UTILS_SCRIPT" ]; then
-    print_error "Utils script not found: $SOURCE_UTILS_SCRIPT"
-    exit 1
-fi
-print_success "Source files found."
+
+# Now SOURCE_MAIN_SCRIPT and SOURCE_UTILS_SCRIPT point to the correct files
+# either locally or in the temporary directory.
+print_success "Source files are ready."
 
 # 2. Determine Installation Directories
 INSTALL_LIB_DIR=""
@@ -168,6 +245,7 @@ if [ -z "$INSTALL_BIN_DIR" ] || [ -z "$INSTALL_LIB_DIR" ]; then
     exit 1
 fi
 
+# Calculate target paths using the potentially updated SOURCE_* variables
 TARGET_MAIN_SCRIPT_PATH="$INSTALL_LIB_DIR/$(basename "$SOURCE_MAIN_SCRIPT")"
 TARGET_UTILS_SCRIPT_PATH="$INSTALL_LIB_DIR/$(basename "$SOURCE_UTILS_SCRIPT")"
 SYMLINK_PATH="$INSTALL_BIN_DIR/$APP_NAME"
@@ -185,19 +263,19 @@ print_info "Proceeding with installation..."
 check_dependencies
 
 # 3.5 Check for and Uninstall Previous Version
-log_info "Checking for existing claude-mcp-manager installation..."
+print_info "Checking for existing claude-mcp-manager installation..."
 EXISTING_CMD_PATH=$(command -v claude-mcp-manager)
 if [ -n "$EXISTING_CMD_PATH" ] && [ -x "$EXISTING_CMD_PATH" ]; then
-    log_info "Found existing installation at: $EXISTING_CMD_PATH"
-    log_info "Attempting to run automatic uninstall of previous version (will not remove config)..."
+    print_info "Found existing installation at: $EXISTING_CMD_PATH"
+    print_info "Attempting to run automatic uninstall of previous version (will not remove config)..."
     if "$EXISTING_CMD_PATH" uninstall --yes; then
         print_success "Previous version uninstalled successfully."
     else
-        log_warn "Uninstall command failed (previous version might be broken or uninstall failed)."
-        log_warn "Proceeding with installation, but manual cleanup might be needed later."
+        print_warning "Uninstall command failed (previous version might be broken or uninstall failed)."
+        print_warning "Proceeding with installation, but manual cleanup might be needed later."
     fi
 else
-    log_info "No previous installation found or command not executable."
+    print_info "No previous installation found or command not executable."
 fi
 printf "\n"
 
@@ -234,7 +312,7 @@ chmod 644 "$TARGET_UTILS_SCRIPT_PATH"
 
 # 7. Create Symlink
 print_info "Creating symlink: $SYMLINK_PATH"
-# Remove existing symlink if it exists, in case of reinstall
+# Remove existing symlink if it exists, in case of reinstall (should be handled by pre-uninstall now)
 rm -f "$SYMLINK_PATH"
 ln -s "$TARGET_MAIN_SCRIPT_PATH" "$SYMLINK_PATH"
 if [ $? -ne 0 ]; then
@@ -271,4 +349,5 @@ print_info "To use the command in your *current* shell session, you may need to:
 printf "  1. Run: %bhash -r%b\n" "$COLOR_BOLD" "$COLOR_RESET"
 printf "  2. Or, open a new terminal tab/window.\n"
 
+# Cleanup function is called automatically via trap
 exit 0 
