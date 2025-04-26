@@ -86,9 +86,10 @@ print_help() {
    echo "                       Import servers from an old MCP JSON config file"
    echo "  export <profile> --output <file>"
    echo "                       Export a profile's servers (with secrets resolved) to a file"
-   echo "  uninstall [--remove-config]"
+   echo "  uninstall [--remove-config] [--yes]"
    echo "                       Remove the claude-mcp-manager script and symlink"
-   echo "                       (--remove-config also deletes the ~/.config/claude directory)"
+   echo "                       (--remove-config also deletes the ~/.config/claude directory, requires prompt)"
+   echo "                       (--yes skips the script/symlink removal confirmation)"
    echo ""
    # Call specific help sections
    # print_server_help # Optionally include full details here?
@@ -1348,12 +1349,17 @@ handle_export_command() {
 handle_uninstall_command() {
     log_debug "handle_uninstall_command started with args: $@"
     local remove_config=0
+    local skip_confirmation=0 # New flag
 
     # Parse arguments
     while [ $# -gt 0 ]; do
         case "$1" in
             --remove-config)
                 remove_config=1
+                shift
+                ;;
+            --yes) # New argument
+                skip_confirmation=1
                 shift
                 ;;
             *)
@@ -1388,18 +1394,22 @@ handle_uninstall_command() {
     else
         # --- Primary Confirmation --- 
         local confirm
-        print_bold "This will remove the following:"
-        if [ -n "$symlink_path" ]; then
-            echo "  - Symlink: ${symlink_path}"
-        fi
-        if [ -n "$script_library_path" ]; then
-            echo "  - Script Library: ${script_library_path}"
-        fi
-        read -p "Are you sure you want to proceed with uninstalling the script? [y/N] " confirm
-        
-        if ! [[ "$confirm" =~ ^[Yy]$ ]]; then
-            print_info "Uninstall cancelled by user."
-            exit 0
+        if [ $skip_confirmation -eq 0 ]; then # Only ask if --yes is NOT set
+            print_bold "This will remove the following:"
+            if [ -n "$symlink_path" ]; then
+                echo "  - Symlink: ${symlink_path}"
+            fi
+            if [ -n "$script_library_path" ]; then
+                echo "  - Script Library: ${script_library_path}"
+            fi
+            read -p "Are you sure you want to proceed with uninstalling the script? [y/N] " confirm
+            
+            if ! [[ "$confirm" =~ ^[Yy]$ ]]; then
+                print_info "Uninstall cancelled by user."
+                exit 0
+            fi
+        else
+            log_info "--yes flag specified, skipping script/symlink removal confirmation."
         fi
 
         # --- Perform Removal --- 
@@ -1438,7 +1448,7 @@ handle_uninstall_command() {
         if [ ! -d "$CONFIG_DIR" ]; then
             print_info "Configuration directory not found: ${CONFIG_DIR}. Nothing to remove."
         else
-            # Explicit confirmation for config removal
+            # Explicit confirmation for config removal (ALWAYS requires confirmation)
             local confirm_config
             print_warning "This will permanently delete the entire configuration directory:"
             print_warning "  ${CONFIG_DIR}"

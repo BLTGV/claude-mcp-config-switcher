@@ -184,6 +184,23 @@ print_info "Proceeding with installation..."
 # 3. Check Dependencies
 check_dependencies
 
+# 3.5 Check for and Uninstall Previous Version
+log_info "Checking for existing claude-mcp-manager installation..."
+EXISTING_CMD_PATH=$(command -v claude-mcp-manager)
+if [ -n "$EXISTING_CMD_PATH" ] && [ -x "$EXISTING_CMD_PATH" ]; then
+    log_info "Found existing installation at: $EXISTING_CMD_PATH"
+    log_info "Attempting to run automatic uninstall of previous version (will not remove config)..."
+    if "$EXISTING_CMD_PATH" uninstall --yes; then
+        print_success "Previous version uninstalled successfully."
+    else
+        log_warn "Uninstall command failed (previous version might be broken or uninstall failed)."
+        log_warn "Proceeding with installation, but manual cleanup might be needed later."
+    fi
+else
+    log_info "No previous installation found or command not executable."
+fi
+printf "\n"
+
 # 4. Ensure Library Directory Exists (already checked writability earlier)
 print_info "Ensuring library directory exists: $INSTALL_LIB_DIR"
 mkdir -p "$INSTALL_LIB_DIR"
