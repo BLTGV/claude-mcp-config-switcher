@@ -182,10 +182,11 @@ printf "\n"
 printf "Proceed with installation? [Y/n] "
 read confirm
 case "$confirm" in
-    [Nn]* | [Nn][Oo]*)
+    [Nn]*) # Match N, No, Never etc.
         print_info "Installation cancelled by user."
         exit 0
         ;;
+    # No explicit pattern for Yes needed, it falls through to the default
     *)
         # Default is Yes
         ;;
