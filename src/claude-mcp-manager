@@ -84,7 +84,8 @@ print_help() {
    echo "  profile <subcommand> Manage profiles (run '$0 profile help' for details)"
    echo "  import --file <path> [--create-profile] [--profile-name <name>]"
    echo "                       Import servers from an old MCP JSON config file"
-   echo "                       (--create-profile generates a profile, --profile-name specifies its name)"
+   echo "  export <profile> --output <file>"
+   echo "                       Export a profile's servers (with secrets resolved) to a file"
    echo ""
    # Call specific help sections
    # print_server_help # Optionally include full details here?
@@ -863,6 +864,10 @@ $(echo "$last_servers" | jq '.')"
             # --- Import Command ---
             handle_import_command "$@"
             ;;
+        export)
+            # --- Export Command ---
+            handle_export_command "$@"
+            ;;
         *)
             # --- Try Profile Activation or Error ---
             local profile_file="${PROFILES_DIR}/${command}.json"
@@ -1205,6 +1210,131 @@ handle_import_command() {
     fi
 
     log_debug "handle_import_command finished."
+}
+
+# === Export Command Logic ===
+handle_export_command() {
+    log_debug "handle_export_command started with args: $@"
+    local profile_name="$1"
+    shift # Consume profile name
+    local output_file=""
+
+    if [ -z "$profile_name" ]; then
+        exit_with_error "Missing required argument: <profile_name>"
+    fi
+
+    # Parse --output argument
+    if [[ "$1" == "--output" && -n "$2" ]]; then
+        output_file="$2"
+        shift 2
+    elif [ $# -gt 0 ]; then # Check if there are any other unexpected args
+        exit_with_error "Unknown argument for export: $1. Expected --output <file>"
+    else
+        exit_with_error "Missing required argument: --output <file>"
+    fi
+
+    log_info "Exporting profile '${profile_name}' to file: ${output_file}"
+
+    # --- Load Secrets --- 
+    load_dotenv # Load secrets from .env into environment
+
+    # --- Validate Profile --- 
+    local profile_file="${PROFILES_DIR}/${profile_name}.json"
+    log_debug "Validating profile file: ${profile_file}"
+    check_file_readable "$profile_file"
+    validate_json_file "$profile_file"
+    log_debug "Profile file validation successful."
+
+    # --- Validate Output Path --- 
+    local output_dir
+    output_dir=$(dirname "$output_file")
+    log_debug "Checking output directory: ${output_dir}"
+    # Ensure output directory exists and is writable
+    if [ ! -d "$output_dir" ]; then
+        log_info "Output directory does not exist. Attempting to create: ${output_dir}"
+        if ! mkdir -p "$output_dir"; then
+             exit_with_error "Failed to create output directory: ${output_dir}"
+        fi
+        log_debug "Output directory created successfully."
+    fi
+    if [ ! -w "$output_dir" ]; then
+        exit_with_error "Output directory is not writable: ${output_dir}"
+    fi
+    # Warn if output file exists
+    if [ -e "$output_file" ]; then
+        log_warning "Output file already exists and will be overwritten: ${output_file}"
+    fi
+    log_debug "Output path validation successful."
+
+    # --- Build Export Object --- 
+    log_info "Building exported configuration..."
+    local export_servers="{}" # Start with an empty JSON object for servers
+    local server_count=0
+
+    # Check if profile has any servers defined
+    if ! jq -e '.servers | length > 0' "$profile_file" > /dev/null; then
+        log_info "Profile '${profile_name}' contains no servers to export."
+    else
+        log_debug "Processing servers listed in profile '${profile_name}'"
+        # Loop through server names in the profile
+        local server_name
+        while IFS= read -r server_name; do
+            if [ -z "$server_name" ]; then continue; fi # Skip empty lines if any
+            log_debug "Processing server for export: ${server_name}"
+            local server_file="${SERVERS_DIR}/${server_name}.json"
+
+            # Validate server definition file
+            log_debug "Validating server definition: ${server_file}"
+            check_file_readable "$server_file"
+            validate_json_file "$server_file"
+
+            # Read server definition content (raw)
+            log_debug "Reading raw server definition content from ${server_file}"
+            local server_value_raw
+            server_value_raw=$(<"$server_file")
+
+            # Resolve placeholders
+            log_debug "Resolving placeholders in server definition for ${server_name}"
+            local server_value_resolved
+            server_value_resolved=$(resolve_placeholders "$server_value_raw")
+            # Validate the resolved JSON
+            if ! echo "$server_value_resolved" | jq -e . > /dev/null 2>&1; then
+                 log_error "Internal Error: resolve_placeholders returned invalid JSON for server '${server_name}'. Skipping this server."
+                 log_debug "Invalid JSON content: $server_value_resolved"
+                 continue # Skip this server and proceed with the next
+            fi
+            log_debug "Placeholders resolved successfully for ${server_name}."
+            
+            # Add server key and RESOLVED value to the export_servers object
+            log_debug "Adding resolved server '${server_name}' to export object."
+            export_servers=$(echo "$export_servers" | jq --arg key "$server_name" --argjson val "$server_value_resolved" '. + {($key): $val}')
+            if [ $? -ne 0 ]; then
+                exit_with_error "jq failed while constructing export object for server '${server_name}'"
+            fi
+            ((server_count++))
+            log_debug "Server '${server_name}' added successfully to export object."
+        done < <(jq -r '.servers[]? // empty' "$profile_file") # Use ? and // empty for safety
+        log_debug "Finished processing servers listed in profile."
+    fi # End server processing loop
+
+    # --- Wrap and Write Output --- 
+    log_info "Writing final exported configuration to: ${output_file}"
+    # Wrap the collected servers under the "mcpServers" key
+    local final_export_json
+    final_export_json=$(echo "{}" | jq --argjson servers "$export_servers" '.mcpServers = $servers')
+
+    # Pretty-print and write to output file
+    echo "$final_export_json" | jq '.' > "$output_file"
+    if [ $? -ne 0 ]; then
+        # Attempt cleanup? Maybe not, user might want the partial file.
+        exit_with_error "Failed to write final export JSON to: ${output_file}"
+    fi
+
+    # Set permissions (consistent with others, though secrets are resolved)
+    chmod 600 "$output_file" || log_warning "Failed to set permissions on output file: ${output_file}"
+
+    print_success "Successfully exported ${server_count} server(s) from profile '${profile_name}' to ${output_file}"
+    log_debug "handle_export_command finished."
 }
 
 # === Script Entry Point ===
