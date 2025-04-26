@@ -1634,7 +1634,6 @@ _claude_mcp_manager_subcommands() {
                          '1: :_describe "profile command" profile_cmds' && return 0
                     ;;
             esac
-             ;;
         import)
             _arguments -s \
                 '--file[Path to old MCP JSON config file]:_files' \
