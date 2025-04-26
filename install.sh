@@ -249,4 +249,9 @@ if ! path_contains "$INSTALL_BIN_DIR"; then
 fi
 printf "Run '%b%s help%b' to get started.\n" "$COLOR_BOLD" "$APP_NAME" "$COLOR_RESET"
 
+printf "\n"
+print_info "To use the command in your *current* shell session, you may need to:"
+printf "  1. Run: %bhash -r%b\n" "$COLOR_BOLD" "$COLOR_RESET"
+printf "  2. Or, open a new terminal tab/window.\n"
+
 exit 0 
