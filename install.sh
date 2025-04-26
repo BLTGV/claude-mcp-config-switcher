@@ -181,16 +181,12 @@ printf "\n"
 
 printf "Proceed with installation? [Y/n] "
 read confirm
-case "$confirm" in
-    [Nn]*) # Match N, No, Never etc.
-        print_info "Installation cancelled by user."
-        exit 0
-        ;;
-    # No explicit pattern for Yes needed, it falls through to the default
-    *)
-        # Default is Yes
-        ;;
-esac
+# Use simple if/else for maximum sh compatibility
+if [ "$confirm" = N* ] || [ "$confirm" = n* ]; then
+    print_info "Installation cancelled by user."
+    exit 0
+fi
+# Otherwise, assume Yes and proceed
 
 # 3. Check Dependencies
 check_dependencies
