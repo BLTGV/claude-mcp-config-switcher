@@ -90,6 +90,7 @@ print_help() {
    echo "                       Remove the claude-mcp-manager script and symlink"
    echo "                       (--remove-config also deletes the ~/.config/claude directory, requires prompt)"
    echo "                       (--yes skips the script/symlink removal confirmation)"
+   echo "  completion <shell>   Output shell completion script (e.g., bash, zsh)"
    echo ""
    # Call specific help sections
    # print_server_help # Optionally include full details here?
@@ -876,6 +877,10 @@ $(echo "$last_servers" | jq '.')"
             # --- Uninstall Command ---
             handle_uninstall_command "$@"
             ;;
+        completion)
+            # --- Completion Command ---
+            handle_completion_command "$@"
+            ;;
         *)
             # --- Try Profile Activation or Error ---
             local profile_file="${PROFILES_DIR}/${command}.json"
@@ -1472,6 +1477,223 @@ handle_uninstall_command() {
 
     print_info "Uninstall process complete."
     log_debug "handle_uninstall_command finished."
+}
+
+# === Shell Completion Logic ===
+
+_generate_bash_completion() {
+  # Using a heredoc to output the completion script
+  cat << EOF
+# bash completion for claude-mcp-manager                               -*- shell-script -*-\n\n_claude_mcp_manager_list_profiles() {\n    # Use the installed command to list profiles, skipping header\n    command claude-mcp-manager profile list 2>/dev/null | tail -n +2 | sed 's/^[[:space:]]*//'\n}\n\n_claude_mcp_manager_list_servers() {\n    # Use the installed command to list servers, skipping header\n    command claude-mcp-manager server list 2>/dev/null | tail -n +2 | sed 's/^[[:space:]]*//'\n}\n\n_claude_mcp_manager_completions()\n{\n    local cur prev words cword\n    _get_comp_words_by_ref -n : cur prev words cword\n\n    # Top-level commands and profile names\n    if [[ \${cword} -eq 1 ]]; then\n        local profiles=\$(_claude_mcp_manager_list_profiles)\n        local commands=\"server profile import export last uninstall completion help\"\n        COMPREPLY=( \$(compgen -W \"\${commands} \${profiles}\" -- \"\${cur}\") )\n        return 0\n    fi\n\n    local command=\"\${words[1]}\"\n    case \"\${command}\" in\n        server)\n            local server_commands=\"list show add edit remove extract help\"\n            if [[ \${cword} -eq 2 ]]; then\n                COMPREPLY=( \$(compgen -W \"\${server_commands}\" -- \"\${cur}\") )\n                return 0\n            fi\n\n            local server_action=\"\${words[2]}\"\n            case \"\${server_action}\" in\n                show|edit|remove)\n                    # Complete with server names\n                    if [[ \${cword} -eq 3 ]]; then\n                         local servers=\$(_claude_mcp_manager_list_servers)\n                         COMPREPLY=( \$(compgen -W \"\${servers}\" -- \"\${cur}\") )\n                    fi\n                    ;;\n                add)\n                    # Complete options like --file, --json\n                    if [[ \"\${cur}\" == -* ]]; then\n                        COMPREPLY=( \$(compgen -W \"--file --json\" -- \"\${cur}\") )\n                    elif [[ \"\${prev}\" == \"--file\" ]]; then\n                         _filedir # Complete file paths\n                    fi\n                    # No completion for server name (arg 3) or json string (arg 5)\n                    ;;\n                extract)\n                    # Complete options like --profile\n                     if [[ \"\${cur}\" == -* ]]; then\n                        COMPREPLY=( \$(compgen -W \"--profile\" -- \"\${cur}\") )\n                    elif [[ \"\${prev}\" == \"--profile\" ]]; then\n                        # Complete with profile names (optional)\n                        local profiles=\$(_claude_mcp_manager_list_profiles)\n                        COMPREPLY=( \$(compgen -W \"\${profiles}\" -- \"\${cur}\") )\n                    fi\n                    ;;\n            esac\n            ;;\n        profile)\n            local profile_commands=\"list show create copy edit add remove delete help\"\n            if [[ \${cword} -eq 2 ]]; then\n                COMPREPLY=( \$(compgen -W \"\${profile_commands}\" -- \"\${cur}\") )\n                return 0\n            fi\n\n            local profile_action=\"\${words[2]}\"\n            case \"\${profile_action}\" in\n                show|edit|delete)\n                    # Complete with profile names\n                    if [[ \${cword} -eq 3 ]]; then\n                         local profiles=\$(_claude_mcp_manager_list_profiles)\n                         COMPREPLY=( \$(compgen -W \"\${profiles}\" -- \"\${cur}\") )\n                    fi\n                    ;;\n                copy)\n                     # Complete source profile (arg 3), then dest profile (arg 4)\n                    if [[ \${cword} -eq 3 || \${cword} -eq 4 ]]; then\n                         local profiles=\$(_claude_mcp_manager_list_profiles)\n                         COMPREPLY=( \$(compgen -W \"\${profiles}\" -- \"\${cur}\") )\n                    fi\n                    ;;\n                add|remove)\n                    # Complete profile name (arg 3), then server names (arg 4+)\n                    if [[ \${cword} -eq 3 ]]; then\n                        local profiles=\$(_claude_mcp_manager_list_profiles)\n                        COMPREPLY=( \$(compgen -W \"\${profiles}\" -- \"\${cur}\") )\n                    elif [[ \${cword} -ge 4 ]]; then\n                        # Complete with available server names\n                        local servers=\$(_claude_mcp_manager_list_servers)\n                        COMPREPLY=( \$(compgen -W \"\${servers}\" -- \"\${cur}\") )\n                    fi\n                    ;;\n                create)\n                    # No completion for new profile name (arg 3)\n                    ;;\n            esac\n            ;;\n        import)\n             # Complete options like --file, --create-profile, --profile-name\n             if [[ \"\${cur}\" == -* ]]; then\n                COMPREPLY=( \$(compgen -W \"--file --create-profile --profile-name\" -- \"\${cur}\") )\n            elif [[ \"\${prev}\" == \"--file\" ]]; then\n                 _filedir # Complete file paths\n            fi\n             # No completion for profile name after --profile-name\n             ;;\n        export)\n             # Complete profile name (arg 2), then options like --output\n             if [[ \${cword} -eq 2 ]]; then\n                 local profiles=\$(_claude_mcp_manager_list_profiles)\n                 COMPREPLY=( \$(compgen -W \"\${profiles}\" -- \"\${cur}\") )\n             elif [[ \"\${cur}\" == -* ]]; then\n                 COMPREPLY=( \$(compgen -W \"--output\" -- \"\${cur}\") )\n             elif [[ \"\${prev}\" == \"--output\" ]]; then\n                 _filedir # Complete file paths\n             fi\n            ;;\n        uninstall)\n            # Complete options like --remove-config, --yes\n             if [[ \"\${cur}\" == -* ]]; then\n                COMPREPLY=( \$(compgen -W \"--remove-config --yes\" -- \"\${cur}\") )\n            fi\n            ;;\n        completion)\n             # Complete shell types\n             if [[ \${cword} -eq 2 ]]; then\n                COMPREPLY=( \$(compgen -W \"bash zsh\" -- \"\${cur}\") )\n             fi\n            ;;\n        *)\n            # If first arg is not a known command, assume it\'s a profile name\n            # No further completion in this case\n            ;;\n    esac\n\n    return 0\n} &&\ncomplete -F _claude_mcp_manager_completions claude-mcp-manager\n\n# ex: filetype=sh\nEOF\n}
+
+# ... (End of _generate_bash_completion function) ...
+EOF
+}
+
+_generate_zsh_completion() {
+  # Using a heredoc to output the Zsh completion script
+  # IMPORTANT: Use simple quotes for the heredoc marker to prevent parameter expansion inside
+  cat << 'EOF'
+#compdef claude-mcp-manager
+
+# Zsh completion for claude-mcp-manager
+
+# Function to get profile names
+_claude_mcp_manager_profiles() {
+    local -a profiles
+    # Use the installed command, skip header, remove leading space
+    profiles=("${(@f)$(command claude-mcp-manager profile list 2>/dev/null | tail -n +2 | sed 's/^[[:space:]]*//')}")
+    _describe 'profile' profiles
+}
+
+# Function to get server names
+_claude_mcp_manager_servers() {
+    local -a servers
+    servers=("${(@f)$(command claude-mcp-manager server list 2>/dev/null | tail -n +2 | sed 's/^[[:space:]]*//')}")
+    _describe 'server' servers
+}
+
+# Main completion function
+_claude_mcp_manager() {
+    local context state state_descr line
+    typeset -A opt_args
+
+    # General options
+    local -a global_opts
+    global_opts=(
+        '(-h --help)'{-h,--help}'[Show help message]'
+        '(-v --version)'{-v,--version}'[Show script version]'
+    )
+
+    # Subcommands
+    local -a commands
+    commands=(
+        'server:Manage server definitions'
+        'profile:Manage profiles'
+        'import:Import servers from an old MCP JSON config file'
+        'export:Export a profile\'s servers (with secrets resolved) to a file'
+        'last:Restore the last used configuration'
+        'uninstall:Remove the claude-mcp-manager script and symlink'
+        'completion:Output shell completion script'
+        'help:Show help message'
+    )
+
+    _arguments -C \
+        $global_opts \
+        '1:command or profile:_alternative \
+            "command: _describe \'\' commands" \
+            "profile: _claude_mcp_manager_profiles"' \
+        '*: :_claude_mcp_manager_subcommands' && return 0
+}
+
+# Handle subcommands
+_claude_mcp_manager_subcommands() {
+    local curcontext="$curcontext"
+
+    case $words[1] in
+        server)
+            local -a server_cmds server_opts
+            server_cmds=(
+                'list:List available server definitions'
+                'show:Show a specific server definition'
+                'add:Add a new server definition'
+                'edit:Edit a server definition'
+                'remove:Remove a server definition'
+                'extract:Extract servers from main config into individual files'
+                'help:Show server help'
+            )
+            server_opts=(
+                # Options for add
+                '(--file)'--file'[Path to JSON file containing server definition]:_files'
+                '(--json)'--json'[JSON string containing server definition]'
+                # Options for extract
+                '(--profile)'--profile'[Profile name to create/update with extracted servers]:_claude_mcp_manager_profiles'
+            )
+
+            case $words[2] in
+                list|help)
+                    _arguments -s $server_opts && return 0
+                    ;;
+                show|edit|remove)
+                    _arguments -s $server_opts \
+                        '1:server name:_claude_mcp_manager_servers' && return 0
+                    ;;
+                add)
+                     _arguments -s \
+                        '1:new server name' \
+                        $server_opts && return 0
+                     ;;
+                extract)
+                    _arguments -s $server_opts && return 0
+                    ;;
+                *) # Default case for 'server' command itself
+                    _arguments -s \
+                        '1: :_describe "server command" server_cmds' \
+                        $server_opts && return 0
+                    ;;
+            esac
+            ;;
+        profile)
+            local -a profile_cmds profile_opts
+            profile_cmds=(
+                'list:List available profiles'
+                'show:Show servers listed in a specific profile'
+                'create:Create a new, empty profile'
+                'copy:Copy an existing profile'
+                'edit:Edit a profile\'s server list'
+                'add:Add server(s) to a profile'
+                'remove:Remove server(s) from a profile'
+                'delete:Delete a profile file'
+                'help:Show profile help'
+            )
+
+            case $words[2] in
+                list|help)
+                     _arguments -s && return 0
+                    ;;
+                show|edit|delete)
+                    _arguments -s \
+                        '1:profile name:_claude_mcp_manager_profiles' && return 0
+                    ;;
+                 create)
+                     _arguments -s \
+                         '1:new profile name' && return 0
+                    ;;
+                copy)
+                    _arguments -s \
+                        '1:source profile name:_claude_mcp_manager_profiles' \
+                        '2:destination profile name' && return 0
+                    ;;
+                add|remove)
+                    _arguments -s \
+                        '1:profile name:_claude_mcp_manager_profiles' \
+                        '*:server name:_claude_mcp_manager_servers' && return 0
+                    ;;
+                 *) # Default case for 'profile' command itself
+                     _arguments -s \
+                         '1: :_describe "profile command" profile_cmds' && return 0
+                    ;;
+            esac
+             ;;
+        import)
+            _arguments -s \
+                '--file[Path to old MCP JSON config file]:_files' \
+                '--create-profile[Generate a profile from imported servers]' \
+                '--profile-name[Specify name for generated profile]:' && return 0
+            ;;
+        export)
+            _arguments -s \
+                '1:profile name:_claude_mcp_manager_profiles' \
+                '--output[Output file path]:_files' && return 0
+            ;;
+        uninstall)
+            _arguments -s \
+                '--remove-config[Also deletes the ~/.config/claude directory]' \
+                '--yes[Skips the script/symlink removal confirmation]' && return 0
+             ;;
+        completion)
+             _arguments -s \
+                '1:shell type:(bash zsh)' && return 0
+            ;;
+        help|last)
+             # These commands take no arguments
+             return 0
+            ;;
+        *) # If first word is not a known command, assume it's a profile for activation
+           # No further arguments expected
+           return 0
+           ;;
+    esac
+}
+
+# Register the completion function
+_claude_mcp_manager "$@"
+
+EOF
+}
+
+handle_completion_command() {
+    log_debug "handle_completion_command started with args: $@"
+    local shell_type="$1"
+
+    if [ -z "$shell_type" ]; then
+        exit_with_error "Missing required argument: <shell_type> (e.g., bash, zsh)"
+    fi
+
+    case "$shell_type" in
+        bash)
+            _generate_bash_completion
+            ;;
+        zsh)
+            # Call the Zsh generation function
+            _generate_zsh_completion
+            ;;
+        *)
+            exit_with_error "Unsupported shell type: '$shell_type'. Supported types: bash, zsh"
+            ;;
+    esac
+    log_debug "Completion script generated for $shell_type."
+    exit 0 # Important: Exit successfully after printing script
 }
 
 # === Script Entry Point ===
