@@ -4,107 +4,121 @@ A command-line tool for macOS to define, manage, and switch between different se
 
 ## Goal
 
-The Claude desktop app stores its configuration, including the `mcpServers` endpoints, in a JSON file. This tool allows you to define multiple named configuration profiles (e.g., 'default', 'staging', 'dev') and easily switch the active `mcpServers` block in the Claude configuration file without manually editing it each time. It also automatically restarts Claude to apply the changes.
+The Claude desktop app stores its configuration, including the `mcpServers` endpoints, in a JSON file at `~/Library/Application Support/Claude/claude_desktop_config.json`. This tool allows you to define individual server configurations and group them into named profiles (e.g., 'default', 'work', 'experimental'). Activating a profile updates the `mcpServers` block in the main Claude config file with the servers defined in that profile, automatically restarting Claude to apply the changes. By separating server definitions and utilizing environment variables for secrets (see "How it Works"), you can easily share server configurations or commit profiles to version control without exposing sensitive credentials.
+
+## Quick Install (Recommended)
+
+Run the following command in your macOS terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/BLTGV/claude-mcp-manager/main/install.sh | sh
+```
+
+This downloads and executes the installer script, which handles dependency checks, copying files, and setting up the command-line tool.
 
 ## Requirements
 
-*   **macOS:** The script relies on macOS-specific paths (`~/Library/Application Support/Claude/`) and commands (`killall`, `open`). **It will not work on Windows or Linux.**
-*   **jq:** The script uses `jq` to parse and manipulate JSON files. Install it if you haven't already:
-    ```bash
-    brew install jq
-    ```
+*   **macOS:** The script relies on macOS-specific paths and commands (`pgrep`, `kill`, `open`). **It will not work on Windows or Linux.**
+*   **jq:** The script uses `jq` for JSON processing. Install via Homebrew: `brew install jq`.
+*   **bash:** Requires a reasonably modern version of bash (>= 3.2) for features like regex matching (`=~`). Standard macOS bash is sufficient.
 
 ## Installation
 
-### Quick Install (Recommended)
-
-_(macOS Only)_ Run the following command in your terminal:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/BLTGV/claude-mcp-manager/main/setup.sh | sh -s -- --install
-```
-
-This will download the script and run its installer directly.
-
 ### Manual Installation
 
-1.  Save the `setup.sh` script to your machine (e.g., download it from the repository).
-2.  Make it executable: `chmod +x setup.sh`
-3.  Run the script's installer from the directory where you saved it:
+1.  Clone the repository or download the source code.
+2.  Navigate to the project directory in your terminal.
+3.  Make the installer executable: `chmod +x install.sh`
+4.  Run the installer:
     ```bash
-    ./setup.sh --install
+    ./install.sh
     ```
-    This will copy the script to `/usr/local/bin/claude-mcp-manager` (using `sudo` if needed) and make it available in your PATH.
-
-You only need to run the installation once. Subsequently, you can use the `claude-mcp-manager` command directly.
+    *   The script will attempt to install to `/usr/local/lib/claude-mcp-manager` and create a symlink in `/usr/local/bin`. This might require `sudo` if you don't have write permissions.
+    *   If `/usr/local` is not writable, it will fall back to `$HOME/.local/lib` and `$HOME/.local/bin`.
+    *   The installer will notify you if the chosen `bin` directory is not in your `$PATH` and provide instructions to add it.
 
 ## How it Works
 
-*   **Configuration Directory:** Named configurations are stored as `.json` files in `~/.config/claude/`.
-*   **Target File:** The script modifies the official Claude config file at `~/Library/Application Support/Claude/claude_desktop_config.json`.
-*   **`mcpServers` Key:** The script *only* reads and writes the `mcpServers` key and its value. Any other keys in your source `.json` files are ignored, and any other keys in the target Claude config file are preserved.
-*   **Tracking (`loaded` file):** The script keeps track of the *name* of the currently active configuration in `~/.config/claude/loaded`.
-*   **Backup (`last.json`):** Before applying a new configuration, the script saves the *current* `mcpServers` block from the target file into `~/.config/claude/last.json`, allowing easy rollback.
-*   **First Run:** If `~/.config/claude/default.json` doesn't exist when you first run the script (after installation), it will try to copy the `mcpServers` block from your existing Claude configuration into `default.json`.
+*   **Configuration Directory:** Stores all data in `~/.config/claude/`.
+*   **Servers Directory:** Individual server definitions are stored as `.json` files in `~/.config/claude/servers/`.
+*   **Profiles Directory:** Profiles, which contain lists of server names, are stored as `.json` files in `~/.config/claude/profiles/`.
+    *   Each profile file looks like: `{\"servers\": [\"server1_name\", \"server2_name\"]}`
+*   **Target File:** The script modifies the `mcpServers` key within the official Claude config file: `~/Library/Application Support/Claude/claude_desktop_config.json`.
+*   **Secrets (`.env` file):** You can store sensitive values (like API keys) in `~/.config/claude/.env`. Server definition files can reference these using placeholders like `{{ENV:YOUR_API_KEY}}` or `{{DOTENV:YOUR_API_KEY}}`. These are resolved when a profile is activated.
+*   **Tracking (`loaded` file):** The script keeps track of the *name* of the currently active profile in `~/.config/claude/loaded`.
+*   **Backup (`last.json`):** Before applying a new profile, the script saves the *current* `mcpServers` block from the target file into `~/.config/claude/last.json`, allowing easy rollback using the `last` command.
+*   **First Run:** The installer runs `claude-mcp-manager server list` to ensure the config directories are created upon successful installation.
 
 ## Usage
 
-_(Note: The specific commands for server/profile management are defined in the PRD and will be implemented.)_
-
-### Activate a Profile
-
-Use the `claude-mcp-manager <profile_name>` command. If no name is given, it defaults to `default`.
-
-```bash
-# Switch to 'work' profile
-claude-mcp-manager work
-
-# Switch to 'default' profile
-claude-mcp-manager default
-# or
-claude-mcp-manager 
+```
+claude-mcp-manager <command | profile_name | option>
 ```
 
-### List Profiles & Servers
+### Primary Commands
 
-```bash
-# List available profiles and the current one
-claude-mcp-manager -l 
-# or 
-claude-mcp-manager --list 
-# or 
-claude-mcp-manager profile list
+*   `<profile_name>`: Activate the specified profile. Reads server definitions listed in the profile, resolves secrets, constructs the `mcpServers` block, backs up the current block in the main config, writes the new block, and restarts Claude.
+*   `last`: Restore the `mcpServers` block that was active before the last profile activation (from `last.json`) and restart Claude.
+*   `server <subcommand>`: Manage server definitions. Run `claude-mcp-manager server help` for details.
+*   `profile <subcommand>`: Manage profiles. Run `claude-mcp-manager profile help` for details.
 
-# List available server definitions
-claude-mcp-manager server list 
-```
+### Server Subcommands (`claude-mcp-manager server ...`)
 
-### Revert to Previous Configuration
+*   `list`: List available server definition files found in `~/.config/claude/servers/`.
+*   `show <name>`: Display the JSON content of the specified server definition file.
+*   `add <name> --file <path>`: Add a new server definition by copying the content from `<path>`.
+*   `add <name> --json '{\"key\":\"value\"}'`: Add a new server definition using the provided JSON string.
+*   `edit <name>`: Open the specified server definition file in your `$EDITOR` (or default like vim/nano).
+*   `remove <name>`: Delete the specified server definition file (prompts for confirmation).
+*   `extract [--profile <name>]`: Read the `mcpServers` block from the main Claude config, save each server as a separate file in `~/.config/claude/servers/`. Optionally, create or update the specified profile `<name>` to list all extracted servers.
 
-Switch back to the configuration that was active *before* the last switch:
+### Profile Subcommands (`claude-mcp-manager profile ...`)
 
-```bash
-claude-mcp-manager last
-```
+*   `list`: List available profile files found in `~/.config/claude/profiles/`.
+*   `show <name>`: List the server names contained within the specified profile file and indicate if the corresponding server definition file exists.
+*   `create <name>`: Create a new, empty profile file.
+*   `copy <src> <dest>`: Copy an existing profile file to a new name.
+*   `edit <name>`: Open the specified profile file in your `$EDITOR` (or default like vim/nano) to manually edit the server list.
+*   `add <profile> <server...>`: Add one or more server names to the specified profile's `"servers"` array.
+*   `remove <profile> <server...>`: Remove one or more server names from the specified profile's `"servers"` array.
+*   `delete <name>`: Delete the specified profile file (prompts for confirmation).
 
-### Manage Servers & Profiles (Examples - based on PRD)
+### Options
 
-```bash
-# Add a server definition from a file
-claude-mcp-manager server add my-new-server --file ./path/to/server.json
+*   `help, -h, --help`: Show the main help message.
+*   `version, -v`: Show the script version.
 
-# Add a server reference to a profile
-claude-mcp-manager profile add work my-new-server
+## Acknowledgements
 
-# Edit a profile
-claude-mcp-manager profile edit work 
-```
+This project was built utilizing [claude-task-master](https://github.com/eyaltoledano/claude-task-master), an AI-driven task management system by Eyal Toledano ([@eyaltoledano](https://github.com/eyaltoledano)) and Ralph Ecom ([@RalphEcom](https://github.com/RalphEcom)), to define, manage, and implement the features described above.
 
 ## Uninstall
 
-To uninstall, simply remove the script and the configuration directory:
+To uninstall, run the following commands:
 
 ```bash
-sudo rm /usr/local/bin/claude-mcp-manager
-rm -rf ~/.config/claude/
-``` 
+# Find the installed command path
+INSTALL_PATH=$(command -v claude-mcp-manager)
+
+if [ -n "$INSTALL_PATH" ] && [ -L "$INSTALL_PATH" ]; then
+  # Get the real path the symlink points to
+  REAL_PATH=$(readlink "$INSTALL_PATH")
+  # Get the directory containing the real script (lib dir)
+  LIB_DIR=$(dirname "$REAL_PATH")
+  # Remove the symlink
+  echo "Removing symlink: $INSTALL_PATH"
+  rm "$INSTALL_PATH"
+  # Remove the library directory
+  if [ -d "$LIB_DIR" ]; then
+    echo "Removing library directory: $LIB_DIR"
+    rm -rf "$LIB_DIR"
+  fi
+else
+  echo "WARN: Could not find installed claude-mcp-manager symlink. Manual removal might be needed."
+fi
+
+# Remove the configuration directory
+echo "Removing configuration directory: ~/.config/claude/"
+rm -rf "$HOME/.config/claude/"
+
+echo "Uninstall complete." 

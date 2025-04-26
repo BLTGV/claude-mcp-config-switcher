@@ -1,0 +1,8 @@
+{
+  "command": "npx",
+  "args": [
+    "-y",
+    "@modelcontextprotocol/server-postgres",
+    "{{ENV:LOCAL_DB_URL}}"
+  ]
+} 
